@@ -16,21 +16,35 @@ jobs:
 
       - name: Call GitHub AI Model
         id: ai_call
+        env:
+          ISSUE_BODY: ${{ github.event.issue.body }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # This calls the GitHub Pro AI endpoint directly
-          RESPONSE=$(curl -X POST "https://models.inference.ai.azure.com/chat/completions" \
+          # Create a temporary JSON file to avoid shell escaping issues
+          cat <<EOF > payload.json
+          {
+            "model": "gpt-4o",
+            "messages": [
+              {"role": "system", "content": "You are a career coach. Transform the user raw notes into professional STAR format Markdown. Use clear headings for Situation, Task, Action, and Result."},
+              {"role": "user", "content": $(echo "$ISSUE_BODY" | jq -Rsa .)}
+            ]
+          }
+          EOF
+
+          # Call the API using the file
+          RESPONSE=$(curl -s -X POST "https://models.inference.ai.azure.com/chat/completions" \
             -H "Content-Type: application/json" \
-            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
-            -d '{
-              "model": "gpt-4o",
-              "messages": [
-                {"role": "system", "content": "You are a career coach. Transform the user raw notes into professional STAR format Markdown. Use clear headings for Situation, Task, Action, and Result."},
-                {"role": "user", "content": ${{ toJson(github.event.issue.body) }}}
-              ]
-            }')
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -d @payload.json)
           
-          # Extract the content from the JSON response and save to a temporary file
+          # Extract content and check for errors
           echo "$RESPONSE" | jq -r '.choices[0].message.content' > result.md
+          
+          if [ "$(cat result.md)" == "null" ]; then
+            echo "Error: AI response was empty or invalid"
+            echo "$RESPONSE"
+            exit 1
+          fi
 
       - name: Save to Portfolio
         run: |
@@ -40,5 +54,5 @@ jobs:
           git config user.name "AI-Career-Bot"
           git config user.email "actions@github.com"
           git add .
-          git commit -m "New STAR entry generated for Issue #${{ github.event.issue.number }}"
+          git commit -m "New STAR entry for Issue #${{ github.event.issue.number }}"
           git push
