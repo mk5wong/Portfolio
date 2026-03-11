@@ -1,0 +1,21 @@
+name: Record New Experience (STAR)
+description: Log your daily lab work, volunteering, or study notes.
+title: "[Log]: "
+labels: ["experience"]
+body:
+  - type: textarea
+    id: raw_notes
+    attributes:
+      label: What happened today?
+      placeholder: Write naturally. Don't worry about grammar or structure...
+    validations:
+      required: true
+  - type: dropdown
+    id: category
+    attributes:
+      label: Category
+      options:
+        - Placement
+        - Volunteering
+        - Study/Revision
+        - Interview Prep
