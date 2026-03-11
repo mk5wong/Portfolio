@@ -20,39 +20,44 @@ jobs:
           ISSUE_BODY: ${{ github.event.issue.body }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Create a temporary JSON file to avoid shell escaping issues
+          # Create safe JSON payload
+          JSON_BODY=$(echo "$ISSUE_BODY" | jq -Rsa .)
+          
           cat <<EOF > payload.json
           {
             "model": "gpt-4o",
             "messages": [
-              {"role": "system", "content": "You are a career coach. Transform the user raw notes into professional STAR format Markdown. Use clear headings for Situation, Task, Action, and Result."},
-              {"role": "user", "content": $(echo "$ISSUE_BODY" | jq -Rsa .)}
+              {"role": "system", "content": "You are a career coach. Transform the user raw notes into professional STAR format Markdown."},
+              {"role": "user", "content": $JSON_BODY}
             ]
           }
           EOF
 
-          # Call the API using the file
-          RESPONSE=$(curl -s -X POST "https://models.inference.ai.azure.com/chat/completions" \
+          # Call API and capture the full response
+          curl -v -X POST "https://models.inference.ai.azure.com/chat/completions" \
             -H "Content-Type: application/json" \
             -H "Authorization: Bearer $GH_TOKEN" \
-            -d @payload.json)
+            -d @payload.json > response.json
           
-          # Extract content and check for errors
-          echo "$RESPONSE" | jq -r '.choices[0].message.content' > result.md
+          # Print response to logs so we can see what's wrong
+          cat response.json
           
-          if [ "$(cat result.md)" == "null" ]; then
-            echo "Error: AI response was empty or invalid"
-            echo "$RESPONSE"
-            exit 1
-          fi
+          # Extract content
+          jq -r '.choices[0].message.content // "AI_ERROR"' response.json > result.md
 
       - name: Save to Portfolio
         run: |
           mkdir -p _posts
           FILENAME="_posts/exp-${{ github.event.issue.number }}.md"
-          mv result.md $FILENAME
-          git config user.name "AI-Career-Bot"
-          git config user.email "actions@github.com"
-          git add .
-          git commit -m "New STAR entry for Issue #${{ github.event.issue.number }}"
-          git push
+          # Only save if we actually got a result
+          if ! grep -q "AI_ERROR" result.md; then
+            mv result.md $FILENAME
+            git config user.name "AI-Career-Bot"
+            git config user.email "actions@github.com"
+            git add .
+            git commit -m "New STAR entry for Issue #${{ github.event.issue.number }}"
+            git push
+          else
+            echo "AI failed to generate content. Check the logs above."
+            exit 1
+          fi
