@@ -15,7 +15,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Generate STAR Content
-        uses: perspective-v/github-models-action@v1 # Uses GitHub Pro AI Models
+        uses: stevennevins/get-github-models-action@v1 # Uses GitHub Pro AI Models
         id: ai
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
