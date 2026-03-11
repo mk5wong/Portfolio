@@ -1,0 +1,38 @@
+name: AI STAR Transformer
+on:
+  issues:
+    types: [opened]
+
+jobs:
+  transform:
+    if: contains(github.event.issue.labels.*.name, 'experience')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      issues: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Generate STAR Content
+        uses: perspective-v/github-models-action@v1 # Uses GitHub Pro AI Models
+        id: ai
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          model: "gpt-4o"
+          instruction: |
+            You are a career coach. Transform the user's raw notes into a professional STAR Method (Situation, Task, Action, Result) format. 
+            Use professional but authentic language. If the result isn't clear, focus on the 'Learning Outcome'.
+            Output as a Markdown file with a nice title.
+          prompt: "${{ github.event.issue.body }}"
+
+      - name: Save to Portfolio
+        run: |
+          mkdir -p _posts
+          FILENAME="_posts/exp-${{ github.event.issue.number }}.md"
+          echo "${{ steps.ai.outputs.response }}" > $FILENAME
+          git config user.name "AI-Career-Bot"
+          git config user.email "actions@github.com"
+          git add .
+          git commit -m "New STAR entry generated"
+          git push
