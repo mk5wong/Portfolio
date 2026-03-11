@@ -1,7 +1,7 @@
 name: AI STAR Transformer
 on:
   issues:
-    types: [opened]
+    types: [opened, reopened]
 
 jobs:
   transform:
@@ -14,25 +14,31 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Generate STAR Content
-        uses: stevennevins/get-github-models-action@v1 # Uses GitHub Pro AI Models
-        id: ai
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          model: "gpt-4o"
-          instruction: |
-            You are a career coach. Transform the user's raw notes into a professional STAR Method (Situation, Task, Action, Result) format. 
-            Use professional but authentic language. If the result isn't clear, focus on the 'Learning Outcome'.
-            Output as a Markdown file with a nice title.
-          prompt: "${{ github.event.issue.body }}"
+      - name: Call GitHub AI Model
+        id: ai_call
+        run: |
+          # This calls the GitHub Pro AI endpoint directly
+          RESPONSE=$(curl -X POST "https://models.inference.ai.azure.com/chat/completions" \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            -d '{
+              "model": "gpt-4o",
+              "messages": [
+                {"role": "system", "content": "You are a career coach. Transform the user raw notes into professional STAR format Markdown. Use clear headings for Situation, Task, Action, and Result."},
+                {"role": "user", "content": ${{ toJson(github.event.issue.body) }}}
+              ]
+            }')
+          
+          # Extract the content from the JSON response and save to a temporary file
+          echo "$RESPONSE" | jq -r '.choices[0].message.content' > result.md
 
       - name: Save to Portfolio
         run: |
           mkdir -p _posts
           FILENAME="_posts/exp-${{ github.event.issue.number }}.md"
-          echo "${{ steps.ai.outputs.response }}" > $FILENAME
+          mv result.md $FILENAME
           git config user.name "AI-Career-Bot"
           git config user.email "actions@github.com"
           git add .
-          git commit -m "New STAR entry generated"
+          git commit -m "New STAR entry generated for Issue #${{ github.event.issue.number }}"
           git push
